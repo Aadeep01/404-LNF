@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "bun run --parallel --filter './apps/*' dev",
     "build": "bun run --filter './apps/*' build && bun run --filter './packages/embed' build",
-    "typecheck": "bun run --filter './packages/*' typecheck",
+    "typecheck": "bun run --filter './apps/*' typecheck && bun run --filter './packages/*' typecheck",
     "lint": "bun run --filter './apps/*' lint"
   }
 }
