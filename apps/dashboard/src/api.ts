@@ -28,6 +28,7 @@ export const api = {
   listProjects: () => request<Project[]>("/api/projects"),
   createProject: (input: { rootUrl: string; sourceLanguage: string; targetLanguage: string }) =>
     request<Project>("/api/projects", { method: "POST", body: JSON.stringify(input) }),
+  deleteProject: (projectId: string) => request<{ deleted: boolean; projectId: string }>(`/api/projects/${projectId}`, { method: "DELETE" }),
   listPages: (projectId: string) => request<Page[]>(`/api/projects/${projectId}/pages`),
   startCrawl: (projectId: string) => request<{ jobId: string; status: string }>(`/api/projects/${projectId}/crawl`, { method: "POST" }),
   getCrawlJob: (jobId: string) => request<CrawlJob>(`/api/crawl-jobs/${jobId}`),

@@ -23,6 +23,21 @@ function App() {
   function showError(reason: unknown) { setError(reason instanceof Error ? reason.message : "Something went wrong"); }
   function selectProject(next: Project) { setProject(next); setError(""); api.listPages(next.id).then(setPages).catch(showError); }
 
+  async function deleteProject(item: Project) {
+    if (!window.confirm(`Delete the ${new URL(item.rootUrl).hostname} project? Its pages and translations will also be removed.`)) return;
+    try {
+      await api.deleteProject(item.id);
+      const remaining = projects.filter((candidate) => candidate.id !== item.id);
+      setProjects(remaining);
+      if (project?.id === item.id) {
+        setProject(null);
+        setPages([]);
+        setJob(null);
+        if (remaining[0]) selectProject(remaining[0]);
+      }
+    } catch (reason) { showError(reason); }
+  }
+
   async function createProject(event: React.FormEvent) {
     event.preventDefault(); setBusy(true); setError("");
     try { const created = await api.createProject(form); setProjects((items) => [created, ...items]); selectProject(created); setForm({ rootUrl: "", sourceLanguage: "en", targetLanguage: "es" }); }
@@ -49,7 +64,7 @@ function App() {
   const selected = pages.filter((page) => page.selected).length;
 
   return <div className="shell">
-    <aside className="sidebar"><div className="brand"><span className="brand-mark">L</span>Localize</div><div className="sidebar-label">Projects</div><div className="project-list">{projects.map((item) => <button className={`project-item ${project?.id === item.id ? "active" : ""}`} key={item.id} onClick={() => selectProject(item)}><span className="project-dot" /><span className="project-name">{new URL(item.rootUrl).hostname}</span><span className="project-status">{item.status}</span></button>)}{!projects.length && <p className="muted small">Create your first project.</p>}</div></aside>
+    <aside className="sidebar"><div className="brand"><span className="brand-mark">L</span>Localize</div><div className="sidebar-label">Projects</div><div className="project-list">{projects.map((item) => <div className={`project-item ${project?.id === item.id ? "active" : ""}`} key={item.id}><button className="project-select" onClick={() => selectProject(item)}><span className="project-dot" /><span className="project-name">{new URL(item.rootUrl).hostname}</span><span className="project-status">{item.status}</span></button><button className="delete-project" title="Delete project" aria-label={`Delete ${new URL(item.rootUrl).hostname}`} onClick={() => deleteProject(item)}>×</button></div>)}{!projects.length && <p className="muted small">Create your first project.</p>}</div></aside>
     <main className="content"><header className="topbar"><div><p className="eyebrow">Website localization</p><h1>{project ? "Project overview" : "Create a project"}</h1></div><div className="status-pill"><span className="status-dot" /> Prototype workspace</div></header>
       {error && <div className="alert">{error}</div>}
       <section className="hero-card"><div><p className="eyebrow">Start here</p><h2>Discover your website</h2><p className="muted">Render pages, analyze content, and prepare your website for translation.</p></div><form className="project-form" onSubmit={createProject}><label>Website URL<input required type="url" placeholder="https://example.com" value={form.rootUrl} onChange={(e) => setForm({ ...form, rootUrl: e.target.value })} /></label><label>Source<select value={form.sourceLanguage} onChange={(e) => setForm({ ...form, sourceLanguage: e.target.value })}><option value="en">English</option><option value="hi">Hindi</option><option value="fr">French</option></select></label><label>Target<select value={form.targetLanguage} onChange={(e) => setForm({ ...form, targetLanguage: e.target.value })}><option value="es">Spanish</option><option value="de">German</option><option value="fr">French</option><option value="hi">Hindi</option></select></label><button className="primary" disabled={busy}> {busy ? "Saving…" : "Add website"}</button></form></section>

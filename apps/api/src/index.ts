@@ -116,6 +116,13 @@ app.get("/api/projects/:projectId", (c) => {
   return row ? c.json(projectResponse(row)) : c.json({ error: "Project not found" }, 404);
 });
 
+app.delete("/api/projects/:projectId", (c) => {
+  const projectId = c.req.param("projectId");
+  const result = db.query("DELETE FROM projects WHERE id = ?").run(projectId);
+  if (result.changes === 0) return c.json({ error: "Project not found" }, 404);
+  return c.json({ deleted: true, projectId });
+});
+
 app.get("/api/projects/:projectId/pages", (c) => {
   const projectId = c.req.param("projectId");
   const project = db.query("SELECT id FROM projects WHERE id = ?").get(projectId);
