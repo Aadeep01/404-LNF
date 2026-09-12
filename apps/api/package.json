@@ -5,11 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "bun run --watch src/index.ts",
-    "build": "bun build src/index.ts --outdir dist --target bun",
-    "typecheck": "tsc --noEmit"
+    "build": "bun build src/index.ts --outdir dist --target bun --external playwright",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
-    "hono": "^4.6.14"
+    "hono": "^4.6.14",
+    "playwright": "^1.49.1"
   },
   "devDependencies": {
     "@types/bun": "^1.2.0",

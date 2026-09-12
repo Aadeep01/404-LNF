@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { db, type PageRow, type ProjectRow, type SegmentRow } from "./db";
+import { crawlJobs, crawlProject } from "./crawler";
 
 const app = new Hono();
 
@@ -116,6 +117,39 @@ app.get("/api/projects/:projectId/pages", (c) => {
     "SELECT * FROM pages WHERE project_id = ? ORDER BY url",
   ).all(projectId);
   return c.json(rows.map(pageResponse));
+});
+
+app.post("/api/projects/:projectId/crawl", (c) => {
+  const projectId = c.req.param("projectId");
+  const project = db.query<ProjectRow, [string]>("SELECT * FROM projects WHERE id = ?").get(projectId);
+  if (!project) return c.json({ error: "Project not found" }, 404);
+  const active = [...crawlJobs.entries()].find(([, job]) => job.status === "queued" || job.status === "running");
+  if (active) return c.json({ error: "A crawl is already running", jobId: active[0] }, 409);
+
+  const jobId = crypto.randomUUID();
+  crawlJobs.set(jobId, { status: "queued", discovered: 0, crawled: 0, skipped: 0 });
+  db.query("UPDATE projects SET status = 'crawling', updated_at = ? WHERE id = ?").run(now(), projectId);
+
+  void (async () => {
+    const job = crawlJobs.get(jobId)!;
+    job.status = "running";
+    try {
+      await crawlProject(project, jobId);
+      job.status = "completed";
+      db.query("UPDATE projects SET status = 'crawled', updated_at = ? WHERE id = ?").run(now(), projectId);
+    } catch (error) {
+      job.status = "failed";
+      job.issue = error instanceof Error ? error.message : "Crawl failed";
+      db.query("UPDATE projects SET status = 'failed', updated_at = ? WHERE id = ?").run(now(), projectId);
+    }
+  })();
+
+  return c.json({ jobId, status: "queued" }, 202);
+});
+
+app.get("/api/crawl-jobs/:jobId", (c) => {
+  const job = crawlJobs.get(c.req.param("jobId"));
+  return job ? c.json(job) : c.json({ error: "Crawl job not found" }, 404);
 });
 
 app.get("/api/pages/:pageId/segments", (c) => {
