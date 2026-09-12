@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Localize sample site</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header><strong>Northstar</strong><nav><a href="#home">Home</a><a href="#about">About us</a><a href="#contact">Contact</a></nav></header>
+    <main id="home">
+      <p class="eyebrow">Sample website</p>
+      <h1>Build a better experience for every visitor.</h1>
+      <p>Translate this page with the approved content from the localization dashboard.</p>
+      <button>Learn more</button>
+      <section id="about"><h2>About us</h2><p>We help teams make their websites useful and welcoming around the world.</p></section>
+      <section id="contact"><h2>Get in touch</h2><label>Email address <input placeholder="Enter your email" /></label></section>
+      <p id="dynamic"></p>
+    </main>
+    <script>
+      const params = new URLSearchParams(location.search);
+      const project = params.get("project");
+      if (project) {
+        const script = document.createElement("script");
+        script.src = "http://localhost:8000/publisher/localizer.js";
+        script.dataset.project = project;
+        script.dataset.api = "http://localhost:8000";
+        document.body.append(script);
+      }
+      document.querySelector("#dynamic").textContent = "This sentence was inserted after the initial page load.";
+    </script>
+  </body>
+</html>

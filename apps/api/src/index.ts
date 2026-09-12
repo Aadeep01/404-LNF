@@ -4,6 +4,7 @@ import { cors } from "hono/cors";
 import { db, type PageRow, type ProjectRow, type SegmentRow } from "./db";
 import { crawlJobs, crawlProject } from "./crawler";
 import { translateText, translationMode } from "./translator";
+import { localizerSource } from "./localizer";
 
 const app = new Hono();
 
@@ -56,6 +57,10 @@ function segmentResponse(row: SegmentRow) {
 }
 
 app.get("/api/health", (c) => c.json({ status: "ok" }));
+
+app.get("/publisher/localizer.js", () => new Response(localizerSource, {
+  headers: { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-store" },
+}));
 
 app.get("/api/projects", (c) => {
   const rows = db.query<ProjectRow, []>(
@@ -134,6 +139,31 @@ app.get("/api/projects/:projectId/pages", (c) => {
     "SELECT * FROM pages WHERE project_id = ? ORDER BY url",
   ).all(projectId);
   return c.json(rows.map(pageResponse));
+});
+
+app.get("/api/projects/:projectId/translations", (c) => {
+  const projectId = c.req.param("projectId");
+  const project = db.query<ProjectRow, [string]>("SELECT * FROM projects WHERE id = ?").get(projectId);
+  if (!project) return c.json({ error: "Project not found" }, 404);
+  const language = c.req.query("lang") || project.target_language;
+  if (language !== project.target_language) return c.json({ projectId, language, translations: [] });
+  const rows = db.query<SegmentRow, [string]>(
+    `SELECT s.* FROM segments s JOIN pages p ON p.id = s.page_id
+     WHERE p.project_id = ? AND s.status = 'approved' ORDER BY p.url, s.id`,
+  ).all(projectId);
+  return c.json({ projectId, sourceLanguage: project.source_language, targetLanguage: project.target_language, translations: rows.map(segmentResponse) });
+});
+
+app.post("/api/projects/:projectId/publish", (c) => {
+  const projectId = c.req.param("projectId");
+  const project = db.query<ProjectRow, [string]>("SELECT * FROM projects WHERE id = ?").get(projectId);
+  if (!project) return c.json({ error: "Project not found" }, 404);
+  const approved = db.query<{ count: number }, [string]>("SELECT COUNT(*) as count FROM segments s JOIN pages p ON p.id = s.page_id WHERE p.project_id = ? AND s.status = 'approved'").get(projectId)?.count ?? 0;
+  if (!approved) return c.json({ error: "Approve at least one translation before publishing" }, 400);
+  db.query("UPDATE projects SET status = 'published', updated_at = ? WHERE id = ?").run(now(), projectId);
+  const publicApiUrl = (process.env.PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
+  const snippet = `<script src="${publicApiUrl}/publisher/localizer.js" data-project="${projectId}" data-api="${publicApiUrl}"></script>`;
+  return c.json({ projectId, approvedSegments: approved, targetLanguage: project.target_language, snippet });
 });
 
 app.post("/api/projects/:projectId/crawl", (c) => {

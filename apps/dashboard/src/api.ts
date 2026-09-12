@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
@@ -45,4 +45,5 @@ export const api = {
   updateSegment: (segmentId: string, targetText: string) => request<Segment>(`/api/segments/${segmentId}`, { method: "PATCH", body: JSON.stringify({ targetText }) }),
   translateSegment: (segmentId: string) => request<Segment & { mode: string }>(`/api/segments/${segmentId}/translate`, { method: "POST" }),
   approveSegment: (segmentId: string) => request<Segment>(`/api/segments/${segmentId}/approve`, { method: "POST" }),
+  publishProject: (projectId: string) => request<{ projectId: string; approvedSegments: number; targetLanguage: string; snippet: string }>(`/api/projects/${projectId}/publish`, { method: "POST" }),
 };
