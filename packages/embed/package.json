@@ -1,0 +1,9 @@
+{
+  "name": "@localization/embed",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target browser --minify"
+  }
+}
