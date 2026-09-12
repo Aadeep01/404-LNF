@@ -97,8 +97,16 @@ app.post("/api/projects", async (c) => {
 
   db.query(
     `INSERT INTO projects (id, root_url, source_language, target_language, status, created_at, updated_at)
-     VALUES ($id, $root_url, $source_language, $target_language, $status, $created_at, $updated_at)`,
-  ).run(row);
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    row.id,
+    row.root_url,
+    row.source_language,
+    row.target_language,
+    row.status,
+    row.created_at,
+    row.updated_at,
+  );
 
   return c.json(projectResponse(row), 201);
 });
@@ -157,6 +165,17 @@ app.get("/api/pages/:pageId/segments", (c) => {
     "SELECT * FROM segments WHERE page_id = ? ORDER BY id",
   ).all(c.req.param("pageId"));
   return c.json(rows.map(segmentResponse));
+});
+
+app.patch("/api/pages/:pageId", async (c) => {
+  const pageId = c.req.param("pageId");
+  const body = await c.req.json<{ selected?: boolean }>();
+  if (typeof body.selected !== "boolean") return c.json({ error: "selected must be a boolean" }, 400);
+  const current = db.query<PageRow, [string]>("SELECT * FROM pages WHERE id = ?").get(pageId);
+  if (!current) return c.json({ error: "Page not found" }, 404);
+  db.query("UPDATE pages SET selected = ? WHERE id = ?").run(body.selected ? 1 : 0, pageId);
+  const updated = db.query<PageRow, [string]>("SELECT * FROM pages WHERE id = ?").get(pageId)!;
+  return c.json(pageResponse(updated));
 });
 
 app.patch("/api/segments/:segmentId", async (c) => {
