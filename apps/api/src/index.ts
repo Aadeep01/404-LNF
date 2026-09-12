@@ -1,7 +1,9 @@
+import "./config";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { db, type PageRow, type ProjectRow, type SegmentRow } from "./db";
 import { crawlJobs, crawlProject } from "./crawler";
+import { translateText, translationMode } from "./translator";
 
 const app = new Hono();
 
@@ -172,6 +174,73 @@ app.get("/api/pages/:pageId/segments", (c) => {
     "SELECT * FROM segments WHERE page_id = ? ORDER BY id",
   ).all(c.req.param("pageId"));
   return c.json(rows.map(segmentResponse));
+});
+
+app.post("/api/pages/:pageId/translate", async (c) => {
+  const pageId = c.req.param("pageId");
+  const page = db.query<{ id: string; project_id: string; title: string }, [string]>(
+    "SELECT id, project_id, title FROM pages WHERE id = ?",
+  ).get(pageId);
+  if (!page) return c.json({ error: "Page not found" }, 404);
+  const project = db.query<ProjectRow, [string]>("SELECT * FROM projects WHERE id = (SELECT project_id FROM pages WHERE id = ?)").get(pageId);
+  if (!project) return c.json({ error: "Project not found" }, 404);
+
+  const segments = db.query<SegmentRow, [string]>(
+    "SELECT * FROM segments WHERE page_id = ? AND (status = 'pending' OR target_text = '') ORDER BY id",
+  ).all(pageId);
+  let translated = 0;
+  for (const segment of segments) {
+    try {
+      const memory = db.query<{ target_text: string }, [string, string, string]>(
+        `SELECT s.target_text FROM segments s
+         JOIN pages p ON p.id = s.page_id
+         JOIN projects pr ON pr.id = p.project_id
+         WHERE s.source_text = ? AND s.target_text != '' AND s.status != 'pending'
+           AND pr.source_language = ? AND pr.target_language = ? LIMIT 1`,
+      ).get(segment.source_text, project.source_language, project.target_language);
+      const result = memory ? { text: memory.target_text, mode: "memory" as const } : await translateText({
+        sourceText: segment.source_text,
+        sourceLanguage: project.source_language,
+        targetLanguage: project.target_language,
+        context: `${page.title} (${segment.element_type})`,
+      });
+      db.query("UPDATE segments SET target_text = ?, status = 'machine_translated', updated_at = ? WHERE id = ?").run(result.text, now(), segment.id);
+      translated += 1;
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : "Translation failed", translated, mode: translationMode() }, 502);
+    }
+  }
+  const rows = db.query<SegmentRow, [string]>("SELECT * FROM segments WHERE page_id = ? ORDER BY id").all(pageId);
+  return c.json({ translated, mode: translationMode(), segments: rows.map(segmentResponse) });
+});
+
+app.post("/api/pages/:pageId/approve-ready", (c) => {
+  const pageId = c.req.param("pageId");
+  const page = db.query<{ id: string }, [string]>("SELECT id FROM pages WHERE id = ?").get(pageId);
+  if (!page) return c.json({ error: "Page not found" }, 404);
+  const result = db.query(
+    "UPDATE segments SET status = 'approved', updated_at = ? WHERE page_id = ? AND target_text != '' AND status IN ('machine_translated', 'edited')",
+  ).run(now(), pageId);
+  const rows = db.query<SegmentRow, [string]>("SELECT * FROM segments WHERE page_id = ? ORDER BY id").all(pageId);
+  return c.json({ approved: result.changes, segments: rows.map(segmentResponse) });
+});
+
+app.post("/api/segments/:segmentId/translate", async (c) => {
+  const segmentId = c.req.param("segmentId");
+  const segment = db.query<SegmentRow, [string]>("SELECT * FROM segments WHERE id = ?").get(segmentId);
+  if (!segment) return c.json({ error: "Segment not found" }, 404);
+  const project = db.query<ProjectRow, [string]>(
+    "SELECT * FROM projects WHERE id = (SELECT project_id FROM pages WHERE id = (SELECT page_id FROM segments WHERE id = ?))",
+  ).get(segmentId);
+  if (!project) return c.json({ error: "Project not found" }, 404);
+  try {
+    const result = await translateText({ sourceText: segment.source_text, sourceLanguage: project.source_language, targetLanguage: project.target_language });
+    db.query("UPDATE segments SET target_text = ?, status = 'machine_translated', updated_at = ? WHERE id = ?").run(result.text, now(), segmentId);
+    const updated = db.query<SegmentRow, [string]>("SELECT * FROM segments WHERE id = ?").get(segmentId)!;
+    return c.json({ ...segmentResponse(updated), mode: result.mode });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Translation failed" }, 502);
+  }
 });
 
 app.patch("/api/pages/:pageId", async (c) => {

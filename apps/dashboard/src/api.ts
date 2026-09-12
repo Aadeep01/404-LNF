@@ -23,6 +23,11 @@ export type CrawlJob = {
   status: "queued" | "running" | "completed" | "failed";
   discovered: number; crawled: number; skipped: number; issue?: string;
 };
+export type Segment = {
+  id: string; pageId: string; sourceText: string; targetText: string; elementType: string;
+  selector: string; sourceHash: string; status: string; issue: string | null;
+  createdAt: string; updatedAt: string;
+};
 
 export const api = {
   listProjects: () => request<Project[]>("/api/projects"),
@@ -34,4 +39,10 @@ export const api = {
   getCrawlJob: (jobId: string) => request<CrawlJob>(`/api/crawl-jobs/${jobId}`),
   updatePage: (pageId: string, selected: boolean) =>
     request<Page>(`/api/pages/${pageId}`, { method: "PATCH", body: JSON.stringify({ selected }) }),
+  listSegments: (pageId: string) => request<Segment[]>(`/api/pages/${pageId}/segments`),
+  translatePage: (pageId: string) => request<{ translated: number; mode: string; segments: Segment[] }>(`/api/pages/${pageId}/translate`, { method: "POST" }),
+  approveReady: (pageId: string) => request<{ approved: number; segments: Segment[] }>(`/api/pages/${pageId}/approve-ready`, { method: "POST" }),
+  updateSegment: (segmentId: string, targetText: string) => request<Segment>(`/api/segments/${segmentId}`, { method: "PATCH", body: JSON.stringify({ targetText }) }),
+  translateSegment: (segmentId: string) => request<Segment & { mode: string }>(`/api/segments/${segmentId}/translate`, { method: "POST" }),
+  approveSegment: (segmentId: string) => request<Segment>(`/api/segments/${segmentId}/approve`, { method: "POST" }),
 };
